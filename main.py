@@ -2,376 +2,300 @@ import flet as ft
 import math
 
 def main(page: ft.Page):
-    page.title = "Steel1 - Smart Lift Planner"
-    page.scroll = "auto"
+    page.title = "Steel1 - Kobelco RK250-5 Crane Calculator"
+    page.scroll = ft.ScrollMode.AUTO
     page.theme_mode = ft.ThemeMode.LIGHT
+    page.window_width = 550
+    page.window_height = 850
 
-    # Kobelco RK250 Load Chart Data
+    # Crane Database
     crane_database = {
-        6.3: {
-            "360": {
-                9.32:  {3.0: 25.0, 4.0: 23.0, 5.0: 19.4, 6.0: 16.3},
-                16.42: {5.0: 16.7, 8.0: 10.9, 10.0: 7.4, 12.0: 5.45},
-                23.52: {6.0: 11.2, 10.0: 7.05, 14.0: 4.15, 16.0: 3.45},
-                30.62: {8.0: 7.0, 12.0: 4.95, 16.0: 3.15, 20.0: 1.9, 24.0: 1.15}
-            }
-        },
-        5.1: {
-            "front": {
-                9.32:  {3.0: 25.0, 4.0: 23.0, 5.0: 19.4, 6.0: 16.3},
-                16.42: {5.0: 16.7, 8.0: 10.9, 10.0: 7.4, 12.0: 5.45},
-                23.52: {6.0: 11.2, 10.0: 7.05, 14.0: 4.15, 16.0: 3.45},
-                30.62: {8.0: 7.0, 12.0: 4.95, 16.0: 3.15, 20.0: 1.9, 24.0: 1.15}
-            },
-            "side": {
-                9.32:  {3.0: 25.0, 4.0: 23.0, 5.0: 18.1, 6.0: 12.9},
-                16.42: {5.0: 15.6, 8.0: 9.65, 10.0: 6.20, 12.0: 4.30},
-                23.52: {6.0: 11.2, 10.0: 6.90, 14.0: 3.75, 16.0: 2.80},
-                30.62: {8.0: 7.0, 12.0: 4.90, 16.0: 3.00, 20.0: 1.65, 24.0: 0.90}
-            }
-        }
+        6.3: {"360": {9.32: {3:25,4:23,5:19.4,6:16.3}, 16.42: {5:16.7,8:10.9,10:7.4,12:5.45}, 23.52: {6:11.2,10:7.05,14:4.15,16:3.45}, 30.62: {8:7,12:4.95,16:3.15,20:1.9,24:1.15}}},
+        5.1: {"side": {9.32: {3:25,4:23,5:18.1,6:12.9}, 16.42: {5:15.6,8:9.65,10:6.2,12:4.3}, 23.52: {6:11.2,10:6.9,14:3.75,16:2.8}, 30.62: {8:7,12:4.9,16:3,20:1.65,24:0.9}}, "front": {9.32: {3:25,4:23,5:19.4,6:16.3}, 16.42: {5:16.7,8:10.9,10:7.4,12:5.45}, 23.52: {6:11.2,10:7.05,14:4.15,16:3.45}, 30.62: {8:7,12:4.95,16:3.15,20:1.9,24:1.15}}},
+        3.8: {"side": {9.32: {3:25,4:23,5:16.3,6:12}, 16.42: {5:12.5,8:8.5,10:5.8,12:4.2}, 23.52: {6:9.5,10:6,14:3.2,16:2.5}, 30.62: {8:6,12:4,16:2.4,20:1.5}}}
     }
 
     single_line_pull = 3.5
+    boom_pivot_height = 1.5
 
-    # Common Inputs
-    outrigger_dd = ft.Dropdown(
-        label="Outrigger အကျယ် (m)",
-        options=[
-            ft.dropdown.Option("6.3"),
-            ft.dropdown.Option("5.1")
-        ],
-        value="6.3"
-    )
-
-    area_dd = ft.Dropdown(
-        label="မချီမည့် ဧရိယာ",
-        options=[
-            ft.dropdown.Option("360"),
-            ft.dropdown.Option("front"),
-            ft.dropdown.Option("side")
-        ],
-        value="360"
-    )
-
-    parts_in = ft.TextField(
-        label="ကြိုးအရေအတွက် (Parts of line)",
-        value="4",
-        keyboard_type=ft.KeyboardType.NUMBER
-    )
-
-    # Auto Planner Controls
-    t1_rad = ft.TextField(
-        label="လိုအပ်သော Radius (m)",
-        keyboard_type=ft.KeyboardType.NUMBER
-    )
-
-    t1_load = ft.TextField(
-        label="မချီမည့် ဝန် (တန်)",
-        keyboard_type=ft.KeyboardType.NUMBER
-    )
-
-    t1_res = ft.Text(
-        "",
-        size=15,
-        weight=ft.FontWeight.BOLD
-    )
-
-    # Manual Planner Controls
-    t2_boom = ft.Dropdown(
-        label="ထုတ်မည့် Boom အရှည် (m)",
-        options=[
-            ft.dropdown.Option("9.32"),
-            ft.dropdown.Option("16.42"),
-            ft.dropdown.Option("23.52"),
-            ft.dropdown.Option("30.62")
-        ],
-        value="16.42"
-    )
-
-    t2_rad = ft.TextField(
-        label="အကွာအဝေး Radius (m)",
-        keyboard_type=ft.KeyboardType.NUMBER
-    )
-
-    t2_res = ft.Text(
-        "",
-        size=15,
-        weight=ft.FontWeight.BOLD
-    )
-
-    # Radius interpolation
-    def get_safe_rad_and_cap(capacities, rad):
-        keys = sorted(capacities.keys())
-
-        if rad in keys:
-            return rad, capacities[rad]
-
-        if rad < keys[0]:
-            return keys[0], capacities[keys[0]]
-
-        if rad > keys[-1]:
-            return None, None
-
-        for i in range(len(keys) - 1):
-            r1, r2 = keys[i], keys[i + 1]
-
-            if r1 < rad < r2:
-                c1, c2 = capacities[r1], capacities[r2]
-
-                interpolated_cap = c1 + (
-                    (rad - r1) * (c2 - c1) / (r2 - r1)
-                )
-
-                return rad, round(interpolated_cap, 2)
-
-        return None, None
-
-    def check_errors():
-        area_val = area_dd.value.lower()
-
-        if outrigger_dd.value == "6.3" and area_val != "360":
-            return "⚠️ Outrigger 6.3m တွင် '360' သာ ရွေးပါ။"
-
-        if outrigger_dd.value == "5.1" and area_val == "360":
-            return "⚠️ Outrigger 5.1m တွင် 'front' သို့မဟုတ် 'side' သာ ရွေးပါ။"
-
+    # ========== NEW: Radius Error Analysis ==========
+    def calculate_capacity_at_radius(out_val, direction, boom_len, radius, rope_cap):
+        """Return capacity at given radius"""
+        if out_val not in crane_database or direction not in crane_database[out_val]:
+            return None
+        if boom_len not in crane_database[out_val][direction]:
+            return None
+        
+        caps = crane_database[out_val][direction][boom_len]
+        radii = sorted(caps.keys())
+        
+        # Find capacity at or just beyond radius
+        for i, r in enumerate(radii):
+            if r >= radius:
+                return caps[r]
+            # Interpolate between radii
+            if i < len(radii) - 1 and radii[i] < radius < radii[i+1]:
+                r1, r2 = radii[i], radii[i+1]
+                c1, c2 = caps[r1], caps[r2]
+                interp = c1 + (c2 - c1) * (radius - r1) / (r2 - r1)
+                return interp
         return None
 
-    def safe_angle(radius, boom):
-        ratio = min(max(radius / boom, -1), 1)
-        return math.degrees(math.acos(ratio))
-
-    # Auto Planner
-    def run_tab1(e):
-        err = check_errors()
-
-        if err:
-            t1_res.value = err
-            t1_res.color = "orange"
-            page.update()
-            return
-
+    def analyze_radius_change(e):
         try:
-            rad_val = float(t1_rad.value)
-            load_val = float(t1_load.value)
-
-            rope_cap = int(parts_in.value) * single_line_pull
-
-            booms = crane_database[
-                float(outrigger_dd.value)
-            ][area_dd.value.lower()]
-
-            found = False
-
-            res_str = "📊 အလိုအလျောက် တွက်ချက်မှု:\n"
-            res_str += "-" * 30 + "\n"
-
-            for b_len, caps in booms.items():
-
-                if rad_val < b_len:
-
-                    calc_r, chart_c = get_safe_rad_and_cap(
-                        caps,
-                        rad_val
-                    )
-
-                    if calc_r is not None:
-
-                        max_load = min(chart_c, rope_cap)
-
-                        if max_load >= load_val:
-
-                            found = True
-
-                            ang = safe_angle(rad_val, b_len)
-
-                            res_str += (
-                                f"✅ Boom {b_len}m | {ang:.1f}°\n"
-                                f"   မနိုင်ဝန်: {max_load} တန်\n\n"
-                            )
-
-            if not found:
-                t1_res.value = "❌ ဤဝန်အတွက် ချီနိုင်သော Boom မရှိပါ။"
-                t1_res.color = "red"
-
-            else:
-                t1_res.value = res_str
-                t1_res.color = "green"
-
-        except Exception:
-            t1_res.value = "ဂဏန်းများကို မှန်ကန်စွာ ထည့်ပါ။"
-            t1_res.color = "red"
-
-        page.update()
-
-    # Manual Planner
-    def run_tab2(e):
-        err = check_errors()
-
-        if err:
-            t2_res.value = err
-            t2_res.color = "orange"
-            page.update()
-            return
-
-        try:
-            b_val = float(t2_boom.value)
-            r_val = float(t2_rad.value)
-
-            rope_cap = int(parts_in.value) * single_line_pull
-
-            caps = crane_database[
-                float(outrigger_dd.value)
-            ][area_dd.value.lower()][b_val]
-
-            if r_val >= b_val:
-                t2_res.value = "❌ Radius သည် Boom ထက် မကြီးရပါ။"
-                t2_res.color = "red"
+            out_val = float(radius_analysis_out.value.split()[0])
+            direction = radius_analysis_dir.value
+            
+            if out_val == 6.3:
+                direction = "360"
+            elif direction == "360":
+                direction = "side"
+            
+            boom_len = float(radius_analysis_boom.value)
+            base_radius = float(radius_analysis_base.value)
+            rope_cap = int(radius_analysis_parts.value) * single_line_pull
+            
+            # Get capacity at base radius
+            base_cap = calculate_capacity_at_radius(out_val, direction, boom_len, base_radius, rope_cap)
+            
+            if base_cap is None:
+                analysis_result.value = f"❌ Radius {base_radius}m အတွက် ဒေတာမရှိပါ"
+                analysis_result.color = "red"
                 page.update()
                 return
+            
+            # Calculate capacities at +1m, +2m, +3m
+            results = []
+            loss_per_meter = []
+            
+            for i in range(1, 4):
+                new_radius = base_radius + i
+                new_cap = calculate_capacity_at_radius(out_val, direction, boom_len, new_radius, rope_cap)
+                
+                if new_cap is not None:
+                    loss = base_cap - new_cap
+                    loss_pct = (loss / base_cap) * 100
+                    loss_per_meter.append(loss_pct / i)
+                    results.append({
+                        "radius": new_radius,
+                        "capacity": new_cap,
+                        "loss": loss,
+                        "loss_pct": loss_pct
+                    })
+            
+            # Build result message
+            res_text = f"📊 Boom {boom_len}m | {out_val}m Outrigger | {direction}\n"
+            res_text += "=" * 40 + "\n"
+            res_text += f"✅ Base Radius: {base_radius}m → {base_cap:.2f} တန်\n\n"
+            
+            res_text += "📉 Radius တိုးလာတိုင်း ကျဆင်းမှု:\n"
+            for r in results:
+                res_text += f"   • {r['radius']}m → {r['capacity']:.2f} တန် (လျော့ {r['loss']:.2f}တန် / {r['loss_pct']:.1f}%)\n"
+            
+            # Average loss per meter
+            if loss_per_meter:
+                avg_loss_pct = sum(loss_per_meter) / len(loss_per_meter)
+                res_text += f"\n⚠️ ပျမ်းမျှအားဖြင့် Radius 1m တိုးတိုင်း {avg_loss_pct:.1f}% ကျဆင်းသည်။\n"
+            
+            # Warning for high radius
+            if base_radius > 15:
+                res_text += "\n🔴 သတိပေးချက်: Radius ကြီးလွန်းပါက ကရိန် မှောက်ကျနိုင်သည်။"
+            elif base_radius > 12:
+                res_text += "\n🟡 သတိပေးချက်: Radius အတော်ကြီးနေပြီ။ ဂရုစိုက်ပါ။"
+            
+            analysis_result.value = res_text
+            analysis_result.color = "blue"
+            
+        except ValueError:
+            analysis_result.value = "ဂဏန်းများကို မှန်ကန်စွာ ထည့်ပါ"
+            analysis_result.color = "red"
+        except Exception as ex:
+            analysis_result.value = f"Error: {str(ex)}"
+            analysis_result.color = "red"
+        
+        page.update()
 
-            calc_r, chart_c = get_safe_rad_and_cap(caps, r_val)
+    # Radius Analysis Inputs
+    radius_analysis_out = ft.Dropdown(
+        label="Outrigger အကျယ်",
+        options=[ft.dropdown.Option("6.3m (360°)"), ft.dropdown.Option("5.1m (side)"), ft.dropdown.Option("3.8m (side)")],
+        value="6.3m (360°)",
+        width=400
+    )
+    
+    radius_analysis_dir = ft.Dropdown(
+        label="ဦးတည်ရာ",
+        options=[ft.dropdown.Option("side"), ft.dropdown.Option("front"), ft.dropdown.Option("360")],
+        value="360",
+        width=400
+    )
+    
+    radius_analysis_boom = ft.Dropdown(
+        label="Boom အရှည် (m)",
+        options=[ft.dropdown.Option("9.32"), ft.dropdown.Option("16.42"), ft.dropdown.Option("23.52"), ft.dropdown.Option("30.62")],
+        value="16.42",
+        width=400
+    )
+    
+    radius_analysis_base = ft.TextField(
+        label="စတင် Radius (m)",
+        keyboard_type=ft.KeyboardType.NUMBER,
+        width=400
+    )
+    
+    radius_analysis_parts = ft.TextField(
+        label="Parts of line",
+        value="4",
+        keyboard_type=ft.KeyboardType.NUMBER,
+        width=400
+    )
+    
+    analyze_btn = ft.ElevatedButton(
+        "Radius 1m တိုးတိုင်း တွက်မည်",
+        on_click=analyze_radius_change,
+        bgcolor="red",
+        color="white",
+        width=400
+    )
+    
+    analysis_result = ft.Text("", size=14, selectable=True)
 
-            if calc_r is None:
-                t2_res.value = "❌ Radius လွန်နေပါသည်။"
-                t2_res.color = "red"
+    # Update direction options based on outrigger
+    def update_dir_options(e):
+        if "6.3" in radius_analysis_out.value:
+            radius_analysis_dir.options = [ft.dropdown.Option("360")]
+            radius_analysis_dir.value = "360"
+            radius_analysis_dir.disabled = True
+        else:
+            radius_analysis_dir.options = [ft.dropdown.Option("side"), ft.dropdown.Option("front")]
+            radius_analysis_dir.value = "side"
+            radius_analysis_dir.disabled = False
+        page.update()
+    
+    radius_analysis_out.on_change = update_dir_options
+    update_dir_options(None)
 
+    # ========== TAB 2: Safe Radius Finder (Prevents Error) ==========
+    safe_radius_out = ft.Dropdown(
+        label="Outrigger အကျယ်",
+        options=[ft.dropdown.Option("6.3m (360°)"), ft.dropdown.Option("5.1m (side)"), ft.dropdown.Option("5.1m (front)"), ft.dropdown.Option("3.8m (side)")],
+        value="6.3m (360°)",
+        width=400
+    )
+    
+    safe_radius_boom = ft.Dropdown(
+        label="Boom အရှည် (m)",
+        options=[ft.dropdown.Option("9.32"), ft.dropdown.Option("16.42"), ft.dropdown.Option("23.52"), ft.dropdown.Option("30.62")],
+        value="16.42",
+        width=400
+    )
+    
+    safe_radius_load = ft.TextField(
+        label="မချီမည့် ဝန် (တန်)",
+        keyboard_type=ft.KeyboardType.NUMBER,
+        width=400
+    )
+    
+    safe_radius_parts = ft.TextField(label="Parts of line", value="4", keyboard_type=ft.KeyboardType.NUMBER, width=400)
+    safe_result = ft.Text("", size=14)
+    
+    def find_safe_radius(e):
+        try:
+            load = float(safe_radius_load.value)
+            out_str = safe_radius_out.value
+            boom_len = float(safe_radius_boom.value)
+            rope_cap = int(safe_radius_parts.value) * single_line_pull
+            
+            if "6.3" in out_str:
+                out_val, direction = 6.3, "360"
+            elif "5.1" in out_str:
+                out_val = 5.1
+                direction = "side" if "side" in out_str else "front"
             else:
-                max_load = min(chart_c, rope_cap)
-
-                ang = safe_angle(r_val, b_val)
-
-                t2_res.value = (
-                    f"📊 Boom {b_val}m တွက်ချက်မှု:\n"
-                    + "-" * 30
-                    + f"\n   ထောင့်: {ang:.1f}°"
-                    + f"\n   မနိုင်ဝန်: {max_load} တန်"
-                )
-
-                t2_res.color = "green"
-
-        except Exception:
-            t2_res.value = "ဂဏန်းများကို မှန်ကန်စွာ ထည့်ပါ။"
-            t2_res.color = "red"
-
+                out_val, direction = 3.8, "side"
+            
+            if out_val not in crane_database or direction not in crane_database[out_val]:
+                safe_result.value = "ဒေတာမရှိပါ"
+                safe_result.color = "red"
+                page.update()
+                return
+            
+            if boom_len not in crane_database[out_val][direction]:
+                safe_result.value = f"Boom {boom_len}m အတွက် ဒေတာမရှိပါ"
+                safe_result.color = "red"
+                page.update()
+                return
+            
+            caps = crane_database[out_val][direction][boom_len]
+            radii = sorted(caps.keys())
+            
+            # Find maximum safe radius
+            safe_radius = None
+            max_cap = None
+            
+            for i, r in enumerate(radii):
+                cap = min(caps[r], rope_cap)
+                if cap >= load:
+                    safe_radius = r
+                    max_cap = cap
+                else:
+                    break
+            
+            if safe_radius:
+                # Calculate next radius loss
+                next_radius = radii[radii.index(safe_radius) + 1] if radii.index(safe_radius) + 1 < len(radii) else safe_radius + 1
+                next_cap = caps.get(next_radius, 0)
+                loss = max_cap - next_cap if next_cap else 0
+                
+                safe_result.value = f"✅ {load} တန် ချီရန် အများဆုံး Radius: {safe_radius}m\n"
+                safe_result.value += f"   Boom {boom_len}m တွင် မနိုင်ဝန်: {max_cap:.2f} တန်\n"
+                safe_result.value += f"   ⚠️ {safe_radius+1}m သွားလျှင် {loss:.2f} တန် ကျမည်"
+                safe_result.color = "green"
+            else:
+                safe_result.value = f"❌ Boom {boom_len}m ဖြင့် {load} တန် မချီနိုင်ပါ။\n   ပိုရှည်သော Boom သုံးပါ သို့မဟုတ် ဝန်လျှော့ပါ။"
+                safe_result.color = "red"
+                
+        except ValueError:
+            safe_result.value = "ဝန်အား ထည့်ပါ"
+            safe_result.color = "red"
         page.update()
+    
+    safe_btn = ft.ElevatedButton("အများဆုံး Radius ရှာမည်", on_click=find_safe_radius, bgcolor="green", color="white", width=400)
 
-    # Auto Layout
-    auto_col = ft.Column(
-        [
-            ft.Text(
-                "လိုချင်သော Radius နှင့် ဝန်ကို ထည့်ပါ-",
-                italic=True
-            ),
-
-            t1_rad,
-            t1_load,
-
-            ft.ElevatedButton(
-                "Boom ရှာမည်",
-                on_click=run_tab1,
-                bgcolor="blue",
-                color="white"
-            ),
-
-            t1_res
+    # Tabs
+    tab1 = ft.Container(
+        content=ft.Column([
+            ft.Text("📐 Radius တိုးလာတိုင်း တန်ချိန်ကျဆင်းနှုန်း", size=16, weight=ft.FontWeight.BOLD),
+            radius_analysis_out, radius_analysis_dir, radius_analysis_boom, 
+            radius_analysis_base, radius_analysis_parts, analyze_btn, 
+            ft.Divider(), analysis_result
+        ], spacing=15),
+        padding=15
+    )
+    
+    tab2 = ft.Container(
+        content=ft.Column([
+            ft.Text("🛡️ ဝန်အတွက် အများဆုံး အန္တရာယ်ကင်း Radius", size=16, weight=ft.FontWeight.BOLD),
+            ft.Text("သတ်မှတ်ဝန်အတွက် ဘယ်Radiusအထိ အန္တရာယ်ကင်းစွာ ချီနိုင်လဲ", italic=True, size=12),
+            safe_radius_out, safe_radius_boom, safe_radius_load, safe_radius_parts, safe_btn, safe_result
+        ], spacing=15),
+        padding=15
+    )
+    
+    tabs = ft.Tabs(
+        selected_index=0,
+        tabs=[
+            ft.Tab(text="📉 Radius vs Capacity", content=tab1),
+            ft.Tab(text="🛡️ Safe Radius Finder", content=tab2),
         ],
-        visible=True,
-        spacing=15
+        expand=True
     )
-
-    # Manual Layout
-    manual_col = ft.Column(
-        [
-            ft.Text(
-                "ကိုယ်တိုင် Boom ရွေးပြီး တွက်ချက်ပါ-",
-                italic=True
-            ),
-
-            t2_boom,
-            t2_rad,
-
-            ft.ElevatedButton(
-                "တန်ချိန်တွက်မည်",
-                on_click=run_tab2,
-                bgcolor="green",
-                color="white"
-            ),
-
-            t2_res
-        ],
-        visible=False,
-        spacing=15
-    )
-
-    # Switch Auto
-    def show_auto(e):
-        auto_btn.bgcolor = "blue"
-        auto_btn.color = "white"
-
-        manual_btn.bgcolor = None
-        manual_btn.color = "green"
-
-        auto_col.visible = True
-        manual_col.visible = False
-
-        page.update()
-
-    # Switch Manual
-    def show_manual(e):
-        auto_btn.bgcolor = None
-        auto_btn.color = "blue"
-
-        manual_btn.bgcolor = "green"
-        manual_btn.color = "white"
-
-        auto_col.visible = False
-        manual_col.visible = True
-
-        page.update()
-
-    # Tab Buttons
-    auto_btn = ft.ElevatedButton(
-        "Auto Planner",
-        on_click=show_auto,
-        bgcolor="blue",
-        color="white"
-    )
-
-    manual_btn = ft.OutlinedButton(
-        "Manual Check",
-        on_click=show_manual,
-        color="green"
-    )
-
-    tab_row = ft.Row(
-        [auto_btn, manual_btn],
-        alignment=ft.MainAxisAlignment.CENTER,
-        spacing=20
-    )
-
-    # Page Layout
+    
     page.add(
-        ft.Text(
-            "Steel1 - Smart Planner",
-            size=24,
-            weight=ft.FontWeight.BOLD,
-            color="blue"
-        ),
-
-        outrigger_dd,
-        area_dd,
-        parts_in,
-
+        ft.Text("Steel1 - Kobelco RK250-5", size=22, weight=ft.FontWeight.BOLD, color="blue"),
+        ft.Text("Radius Error Analysis & Safe Zone Calculator", size=14, italic=True),
         ft.Divider(),
-
-        tab_row,
-
-        ft.Divider(),
-
-        auto_col,
-        manual_col
+        tabs
     )
 
 ft.app(target=main)
