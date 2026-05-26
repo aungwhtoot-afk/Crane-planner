@@ -1,4 +1,4 @@
-Import flet as ft
+import flet as ft
 import math
 
 def main(page: ft.Page):
@@ -156,11 +156,10 @@ def main(page: ft.Page):
         area_dd, 
         parts_in, 
         ft.Divider(),
-        mode_dd, # ဒီနေရာကနေ Auto/Manual ရွေးရပါမယ်
+        mode_dd,
         ft.Divider(),
         auto_col,
         manual_col
     )
 
 ft.app(target=main)
-
